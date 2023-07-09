@@ -24,6 +24,8 @@ struct ServerRoom {
     room_id: String,
     room_name: String,
     game_started: bool,
+    game_state: Option<GameState>,
+    previous_turn: Option<Turn>,
 }
 
 impl ServerRoom {
@@ -33,6 +35,8 @@ impl ServerRoom {
             room_id,
             room_name: DEFAULT_ROOM_NAME.to_string(),
             game_started: false,
+            game_state: None,
+            previous_turn: None,
         }
     }
 }
@@ -144,16 +148,65 @@ impl PoolGame for PoolServer {
         todo!();
     }
     async fn get_game_state(&self, req: Request<RoomId>) -> Result<Response<GameState>, Status> {
-        todo!();
+        let mut rooms_look = self.rooms.lock();
+        let rooms_ref = rooms_look.as_mut().unwrap();
+
+        if rooms_ref.contains_key(&req.get_ref().room_code) {
+            let room = rooms_ref.get_mut(&req.get_ref().room_code).unwrap();
+            if room.game_started && room.game_state.is_some() {
+                let game_state = room.game_state.as_ref().unwrap();
+                return Ok(Response::new(GameState { balls: game_state.balls.clone(), scores: game_state.scores.clone(), p1_solid: game_state.p1_solid, p1_turn: game_state.p1_turn }))
+            } else {
+                return Err(Status::unavailable("game is not started yet"));
+            }
+        } else {
+            return Err(Status::invalid_argument("room does not exist"));
+        }
     }
     async fn post_turn(&self, req: Request<Turn>) -> Result<Response<()>, Status> {
         todo!();
     }
     async fn check_win_state(&self, req: Request<RoomId>) -> Result<Response<WinState>, Status> {
-        todo!();
+        let mut rooms_look = self.rooms.lock();
+        let rooms_ref = rooms_look.as_mut().unwrap();
+
+        if rooms_ref.contains_key(&req.get_ref().room_code) {
+            let room = rooms_ref.get_mut(&req.get_ref().room_code).unwrap();
+            if room.game_started && room.game_state.is_some() {
+                let game_state = room.game_state.as_ref().unwrap();
+                let mut in_play = Vec::new();
+                let mut win_state = 0;
+                for ball in &game_state.balls {
+                    in_play.push(ball.in_play);
+                }
+                if !in_play[0..6].contains(&true) {
+                    win_state = game_state.p1_solid;
+                }
+                if !in_play[8..14].contains(&true) {
+                    win_state = !(game_state.p1_solid != 1) as i32 + 1;
+                }
+                return Ok(Response::new(WinState { win_state }));
+            } else {
+                return Err(Status::unavailable("game is not started yet"));
+            }
+        } else {
+            return Err(Status::invalid_argument("room does not exist"));
+        }
     }
     async fn get_previous_turn(&self, req: Request<RoomId>) -> Result<Response<Turn>, Status> {
-        todo!();
+        let mut rooms_look = self.rooms.lock();
+        let rooms_ref = rooms_look.as_mut().unwrap();
+
+        if rooms_ref.contains_key(&req.get_ref().room_code) {
+            let room = rooms_ref.get_mut(&req.get_ref().room_code).unwrap();
+            if room.previous_turn.is_some() {
+                return Ok(Response::new(room.previous_turn.as_ref().unwrap().clone()));
+            } else {
+                return Err(Status::unavailable("no previous turn"));
+            }
+        } else {
+            return Err(Status::invalid_argument("room does not exist"));
+        }
     }
 }
 
